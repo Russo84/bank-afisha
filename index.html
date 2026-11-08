@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Афиша в банке — прототип</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@420;560;680;780&display=swap" rel="stylesheet">
+<script src="qrcode.min.js"></script>
+<style>
+  :root {
+    --red: #e10600;
+    --red-dark: #b40d09;
+    --ink: #1c1416;
+    --muted: #74686c;
+    --line: #eadfdc;
+    --paper: #f4f0eb;
+    --card: #fff;
+    --shadow: 0 24px 60px rgba(40, 10, 14, .28);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    min-height: 100dvh;
+    background: #241416;
+    color: var(--ink);
+    font-family: Manrope, "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+    display: grid;
+    place-items: center;
+  }
+  button, input { font-family: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  .layout { display: flex; align-items: center; gap: 36px; }
+  .side { width: 320px; color: #f6ecea; }
+  .side p { margin: 0 0 14px; font-size: 15px; line-height: 1.45; color: #f0e4e1; }
+  .side a {
+    color: white;
+    font-weight: 680;
+  }
+  .side .quiet { color: #cbb8b4; font-size: 13px; }
+  #phone {
+    width: 390px;
+    height: min(844px, calc(100dvh - 28px));
+    background: var(--paper);
+    border-radius: 38px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,255,255,.4);
+    display: flex;
+    flex-direction: column;
+  }
+  #status {
+    height: 34px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 22px 4px;
+    font-size: 12px;
+    font-weight: 680;
+    flex: none;
+  }
+  #status span:last-child { font-weight: 560; letter-spacing: .04em; color: #3a2c2e; }
+  #view { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .pane { min-height: 100%; }
+  .pane.anim { animation: slide .38s cubic-bezier(.22,.8,.28,1); }
+  .pane.anim.back { animation-name: slideBack; }
+  @keyframes slide {
+    from { opacity: .4; transform: translateX(22px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes slideBack {
+    from { opacity: .4; transform: translateX(-22px); }
+    to { opacity: 1; transform: none; }
+  }
+  #dock {
+    flex: none;
+    padding: 10px 16px 12px;
+    background: linear-gradient(180deg, rgba(244,240,235,0), #f4f0eb 28%);
+  }
+  #dock.hide, #tabs.hide { display: none; }
+  #tabs {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    background: rgba(255,255,255,.94);
+    border-top: 1px solid var(--line);
+    padding: 7px 6px 12px;
+  }
+  #tabs button {
+    border: 0;
+    background: transparent;
+    color: #8d8084;
+    font-size: 10px;
+    font-weight: 680;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 0;
+  }
+  #tabs button.on { color: var(--red); }
+  #toast {
+    position: absolute;
+    left: 50%;
+    bottom: 92px;
+    transform: translateX(-50%) translateY(8px);
+    background: #1c1416;
+    color: white;
+    font-size: 13px;
+    font-weight: 560;
+    padding: 10px 14px;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: .25s ease;
+    z-index: 8;
+    max-width: 86%;
+    text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .sheet-back {
+    position: absolute;
+    inset: 0;
+    background: rgba(22, 10, 12, .38);
+    z-index: 7;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+  }
+  .sheet-back.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: white;
+    border-radius: 22px 22px 0 0;
+    padding: 14px 18px 28px;
+    transform: translateY(105%);
+    transition: transform .42s cubic-bezier(.22,.8,.28,1);
+  }
+  .sheet-back.show .sheet { transform: none; }
+  .sheet h3 { margin: 8px 0; font-size: 20px; }
+  .sheet p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 14px; }
+  .grab { width: 36px; height: 4px; border-radius: 4px; background: #e4d9d4; margin: 0 auto 8px; }
+
+  .homebar, .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 16px 8px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand i {
+    width: 34px; height: 34px; border-radius: 11px;
+    background: var(--red);
+    display: grid; place-items: center;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+  }
+  .brand i::before {
+    content: "";
+    width: 16px; height: 12px;
+    border: 1.6px solid white;
+    border-radius: 2px;
+    background:
+      radial-gradient(circle at 0 6px, transparent 3px, #fff 3.2px) left / 4px 4px no-repeat,
+      radial-gradient(circle at 100% 6px, transparent 3px, #fff 3.2px) right / 4px 4px no-repeat;
+  }
+  .brand b { display: block; font-size: 16px; letter-spacing: -.03em; }
+  .brand span { display: block; color: var(--muted); font-size: 12px; font-weight: 560; margin-top: -1px; }
+  .city, .icon {
+    border: 0;
+    background: white;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 680;
+    font-size: 13px;
+    color: var(--ink);
+    box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  }
+  .bar h1 { font-size: 16px; margin: 0; letter-spacing: -.03em; font-weight: 780; }
+  .icon.back {
+    width: 36px; height: 36px; padding: 0;
+    font-size: 26px; line-height: 1; color: var(--ink);
+  }
+  .search {
+    margin: 0 16px 10px;
+    background: white;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid transparent;
+  }
+  .search:focus-within { border-color: #f0c4c2; }
+  .search input {
+    border: 0; outline: 0; background: transparent;
+    width: 100%; height: 42px; font-size: 15px; color: var(--ink);
+  }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 12px; }
+  .chips::-webkit-scrollbar, .hscroll::-webkit-scrollbar { display: none; }
+  .chips button, .sess {
+    border: 0; background: white; color: var(--ink);
+    border-radius: 999px; padding: 8px 12px; font-weight: 680; font-size: 13px;
+    flex: none;
+  }
+  .chips button.on { background: var(--red); color: white; }
+  h2.sec {
+    font-size: 18px; margin: 6px 16px 10px; letter-spacing: -.03em;
+  }
+  .hscroll { display: flex; gap: 12px; overflow-x: auto; padding: 0 16px 8px; scroll-snap-type: x mandatory; }
+  .card, .feature {
+    background: white; border: 0; padding: 0; text-align: left; color: inherit;
+    border-radius: 22px; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(60, 20, 24, .05);
+  }
+  .card { scroll-snap-align: start; flex: 0 0 230px; }
+  .feature, .list .card { display: block; width: calc(100% - 32px); margin: 0 16px 14px; flex: none; }
+  .art {
+    min-height: 148px; padding: 14px; color: white;
+    display: flex; flex-direction: column; justify-content: space-between;
+    position: relative;
+  }
+  .feature .art { min-height: 230px; }
+  .art .kicker { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 680; opacity: .86; }
+  .art strong { font-size: 28px; letter-spacing: -.045em; line-height: .92; font-weight: 780; display: block; margin-top: 8px; }
+  .feature .art strong { font-size: 40px; }
+  .art em { font-style: normal; font-size: 12px; font-weight: 680; opacity: .9; }
+  .age {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(0,0,0,.35); color: white; border-radius: 999px;
+    font-size: 11px; font-weight: 780; padding: 4px 7px;
+  }
+  .ribbon {
+    align-self: flex-start;
+    background: #fff4d8; color: #6a4a08;
+    font-size: 11px; font-weight: 780;
+    border-radius: 999px; padding: 4px 8px;
+  }
+  .art-vals { background: radial-gradient(120% 90% at 100% 0%, #ffc2b8 0%, transparent 42%), linear-gradient(165deg, #9d2430, #2a0d12 72%); }
+  .art-chele { background: radial-gradient(90% 80% at 0% 100%, #ffe1a3, transparent 46%), linear-gradient(200deg, #ef6a32, #7c1c2c); }
+  .art-bond { background: radial-gradient(70% 55% at 88% 12%, #dff58a, transparent 42%), linear-gradient(165deg, #1c4036, #0c1411 70%); }
+  .art-butusov { background: radial-gradient(circle at 72% 38%, rgba(255,255,255,.55), transparent 22%), linear-gradient(160deg, #3a4250, #101216 74%); }
+  .art-ivan { background: radial-gradient(80% 70% at 10% 0%, #fff6cc, transparent 40%), linear-gradient(185deg, #46b0e4, #1a4e8c); }
+  .meta { padding: 10px 12px 12px; }
+  .meta b { display: block; font-size: 15px; letter-spacing: -.02em; line-height: 1.25; }
+  .meta span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 560; }
+  .pad { padding: 0 16px 18px; }
+  .venue, .block, .acc, .order {
+    background: white; border-radius: 18px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .venue b, .block b { display: block; font-size: 15px; }
+  .venue span, .muted, .block span { color: var(--muted); font-size: 13px; line-height: 1.4; font-weight: 560; }
+  .sessions { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .sess { border-radius: 16px; min-width: 84px; text-align: left; }
+  .sess.on { background: var(--ink); color: white; }
+  .sess b { display: block; font-size: 14px; }
+  .sess span, .sess em { display: block; font-style: normal; font-size: 11px; font-weight: 560; opacity: .75; }
+  .about { font-size: 15px; line-height: 1.45; margin: 0 0 10px; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.4; margin: 0 0 8px; }
+  .cta, #paybtn {
+    width: 100%; border: 0; border-radius: 16px; background: var(--red); color: white;
+    font-size: 16px; font-weight: 780; padding: 15px 16px; letter-spacing: -.02em;
+    position: relative; overflow: hidden;
+  }
+  .cta:disabled, #paybtn:disabled { background: #e7d7d4; color: #9a8888; }
+  .cta.ghost, .textbtn {
+    background: white; color: var(--ink); margin-top: 8px;
+  }
+  #paybtn.loading::after {
+    content: "";
+    position: absolute; inset: 0 auto 0 0; width: 30%;
+    background: rgba(255,255,255,.28);
+    animation: load 1s ease forwards;
+  }
+  @keyframes load { to { width: 100%; } }
+  #paybtn.shake { animation: shake .35s; }
+  @keyframes shake {
+    20% { transform: translateX(-4px); }
+    40% { transform: translateX(4px); }
+    60% { transform: translateX(-3px); }
+    80% { transform: translateX(2px); }
+  }
+  .hall { background: white; border-radius: 18px; padding: 12px 10px 14px; margin-bottom: 10px; }
+  .stage {
+    margin: 0 28px 12px; height: 28px; border-radius: 0 0 40px 40px;
+    background: linear-gradient(180deg, #2a2326, #5c4e52);
+    color: #f4ecec; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    display: grid; place-items: center;
+  }
+  .row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .row > span { width: 14px; text-align: right; color: #b0a4a6; font-size: 10px; font-weight: 680; }
+  .seats { display: flex; gap: 3px; align-items: center; }
+  .aisle { width: 8px; flex: none; }
+  .seat {
+    width: 16px; height: 16px; border-radius: 4px; border: 0; padding: 0;
+    background: #fff; box-shadow: inset 0 0 0 1px #e4d8d4;
+    transition: transform .16s cubic-bezier(.2,1.4,.36,1), background .16s;
+  }
+  .seat.z-near { box-shadow: inset 0 2px 0 var(--red), inset 0 0 0 1px #e4d8d4; }
+  .seat.z-mid { box-shadow: inset 0 2px 0 #e0a15a, inset 0 0 0 1px #e4d8d4; }
+  .seat.z-far { box-shadow: inset 0 2px 0 #cfc6c2, inset 0 0 0 1px #e4d8d4; }
+  .seat.on { background: var(--red); box-shadow: none; transform: scale(1.12); }
+  .seat.taken { background: #e6dfdc; box-shadow: none; }
+  .seat.wide { width: 64px; height: 36px; border-radius: 10px; font-size: 11px; font-weight: 780; color: var(--ink); }
+  .seat.wide.on { color: white; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 8px; }
+  .legend span { font-size: 11px; color: var(--muted); font-weight: 680; display: flex; align-items: center; gap: 5px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; background: white; box-shadow: inset 0 0 0 1px #e4d8d4; }
+  .sw.taken { background: #e6dfdc; box-shadow: none; }
+  .sw.on { background: var(--red); box-shadow: none; }
+  .ga {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    background: #fff7f4; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px;
+  }
+  .ga b { display: block; font-size: 14px; }
+  .ga span { font-size: 12px; color: var(--muted); font-weight: 560; }
+  .stepper { display: flex; align-items: center; gap: 8px; }
+  .stepper button {
+    width: 32px; height: 32px; border-radius: 10px; border: 0; background: white;
+    font-size: 18px; font-weight: 680;
+  }
+  .rowsplit { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-size: 14px; }
+  .rowsplit span { color: var(--muted); }
+  .rowsplit.total { font-weight: 780; font-size: 16px; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+  .acc { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 1.5px solid transparent; text-align: left; }
+  .acc.on { border-color: var(--red); }
+  .acc small { display: block; color: var(--muted); font-weight: 560; }
+  .acc.warn { color: var(--red); font-size: 12px; font-weight: 680; }
+  .plastic {
+    height: 168px; border-radius: 20px; padding: 16px;
+    background: radial-gradient(90% 80% at 100% 0%, #ffb1ad, transparent 40%), linear-gradient(145deg, #ff3b30, #9d0d12);
+    color: white; display: flex; flex-direction: column; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .plastic b { font-size: 28px; letter-spacing: -.04em; }
+  .order { width: calc(100% - 32px); margin: 0 16px 10px; display: block; border: 0; text-align: left; color: inherit; }
+  .order b { display: block; }
+  .done { padding: 48px 24px 24px; text-align: center; }
+  .done h1 { font-size: 28px; letter-spacing: -.04em; margin: 12px 0 8px; }
+  .mark {
+    width: 74px; height: 74px; border-radius: 50%; background: #e10600; margin: 0 auto;
+    display: grid; place-items: center;
+    animation: pop .45s cubic-bezier(.2,1.4,.36,1);
+  }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  .mark path { stroke-dasharray: 40; stroke-dashoffset: 40; animation: draw .45s .12s ease forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .qr {
+    width: 184px; height: 184px; margin: 8px auto 12px; background: white;
+    border-radius: 16px; display: grid; place-items: center; padding: 8px;
+  }
+  .qr img, .qr canvas { display: block; }
+  .codefallback { font-weight: 780; letter-spacing: .08em; font-size: 18px; }
+  .empty { margin: 12px 16px; color: var(--muted); line-height: 1.45; }
+  .more p { font-size: 14.5px; line-height: 1.45; margin: 0 0 10px; }
+  .more a { color: var(--red); font-weight: 780; }
+  @media (max-width: 860px) {
+    body { display: block; background: var(--paper); }
+    .layout { display: block; }
+    .side { display: none; }
+    #phone { width: 100%; height: 100dvh; border-radius: 0; box-shadow: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div id="phone">
+    <div id="status"><span id="clk">–:–</span><span>LTE</span></div>
+    <div id="view"></div>
+    <div id="dock"></div>
+    <nav id="tabs"></nav>
+    <div id="toast" role="status"></div>
+    <div class="sheet-back" id="sheet" data-act="city-close">
+      <div class="sheet" data-act="sheet">
+        <div class="grab"></div>
+        <h3>Москва</h3>
+        <p>В фиде МТС Live события есть больше чем в 400 городах. В прототип я положил только Москву и ближайшее Подмосковье: площадки и цены, которые успел сверить по открытым афишам ноября 2026.</p>
+      </div>
+    </div>
+  </div>
+  <aside class="side">
+    <p>Кликабельная афиша внутри банковского приложения. Сценарий как у «Афиши» в «Городе» Т-Банка, гамма красно-белая, как в брифе.</p>
+    <p>Пять живых событий ноября 2026: выбор сеанса, места, оплата со счёта, билет с кодом.</p>
+    <p><a href="roadmap.html">Роадмап запуска и вендоры</a></p>
+    <p class="quiet">Это прототип для тестового, не приложение банка.</p>
+  </aside>
+</div>
+<script>
+const TABS = [
+  ["home", "Афиша"],
+  ["tickets", "Билеты"],
+  ["account", "Счёт"],
+  ["more", "Ещё"]
+];
+const WITH_TABS = new Set(TABS.map(t => t[0]));
+const ICONS = {
+  home: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1Z"/></svg>',
+  tickets: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.2a1.8 1.8 0 0 0 0 3.6V16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.2a1.8 1.8 0 0 0 0-3.6Z"/></svg>',
+  account: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>',
+  more: '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>'
+};
+
+const EVENTS = [
+  {
+    id: "bond", cat: "concert", art: "bond",
+    title: "Бонд с кнопкой", short: "Бонд\nс кнопкой",
+    genre: "Инди, фолк", age: "16+",
+    venue: "ВТБ Арена, малая арена",
+    address: "Ленинградский проспект, 36. Метро «Динамо» и «Петровский парк».",
+    duration: "около 2 часов",
+    organizer: "ИП Цепляева Виктория Валерьевна",
+    ribbon: "Почти всё продано",
+    from: 1900,
+    hall: "bond",
+    about: "Инди-фолк из Нефтекамска. После песни «Кухни» группа выходит на малую арену «Динамо» расширенным составом: хор, струнные, народные инструменты. На сайте арены билеты заявлены от 1 900 ₽. Группа писала, что основной тираж разобран и в кассу могут вернуться только отдельные места.",
+    priceNote: "Танцпол — 1 900 ₽, нижняя цена с сайта ВТБ Арены. Сектор B211 — 3 000 ₽: столько стоило место в открытой кассе concert.ru. Другие пояса без опубликованной цены я не размечал.",
+    sessions: [{ id: "bond-14", label: "14 ноя", wd: "сб", time: "20:00", floor: 1900 }]
+  },
+  {
+    id: "vals", cat: "musical", art: "vals",
+    title: "Вальс-бостон", short: "Вальс-\nбостон",
+    genre: "Мюзикл", age: "16+",
+    venue: "Театр эстрады",
+    address: "Берсеневская набережная, 20/2.",
+    duration: "3 часа",
+    organizer: "ООО «Медиа-дом „Красный квадрат“»",
+    from: 1800,
+    hall: "theater",
+    near: 6000, mid: 3500, box: 9000,
+    about: "Мюзикл на песнях Александра Розенбаума. Молодой ростовский врач спасает человека из криминального мира, и расплата растягивается на годы. Ноябрьские показы на основной сцене — последние. Премьера была 8 октября 2025 года.",
+    priceNote: "Открытая вилка на спектакль — 1 800–20 000 ₽. Пояса 1 800 / 3 500 / 6 000 / 9 000 стоят внутри неё. Это упрощение для прототипа, не схема кассы. На части сеансов нижняя цена поднимается до 2 000 ₽.",
+    sessions: [
+      { id: "vals-10-19", label: "10 ноя", wd: "вт", time: "19:00", floor: 1800 },
+      { id: "vals-12-19", label: "12 ноя", wd: "чт", time: "19:00", floor: 1800 },
+      { id: "vals-14-13", label: "14 ноя", wd: "сб", time: "13:00", floor: 1800 },
+      { id: "vals-14-18", label: "14 ноя", wd: "сб", time: "18:00", floor: 2000 },
+      { id: "vals-15-18", label: "15 ноя", wd: "вс", time: "18:00", floor: 1800 },
+      { id: "vals-18-19", label: "18 ноя", wd: "ср", time: "19:00", floor: 1800 },
+      { id: "vals-22-18", label: "22 ноя", wd: "вс", time: "18:00", floor: 1800 }
+    ]
+  },
+  {
+    id: "chele", cat: "musical", art: "chele",
+    title: "Всё будет Челентано!", short: "Всё будет\nЧелентано",
+    genre: "Мюзикл", age: "12+",
+    venue: "Театр МДМ",
+    address: "Комсомольский проспект, 28. Метро «Фрунзенская», выход в здании театра.",
+    duration: "3 часа с антрактом",
+    organizer: "«Бродвей Москва»",
+    from: 2000,
+    hall: "theater",
+    near: 3600, mid: 2800, box: 4800,
+    about: "Новый мюзикл «Бродвей Москва» на итальянских хитах, премьера 7 октября 2026 года. Дима Истомин обещает привезти звезду на День города, и обещание раскручивает курортную комедию. Режиссёр Нина Чусова.",
+    priceNote: "У Ticketland на афише ноября стоит «от 2 000 ₽». Полный прайс рядов касса в открытом виде не отдала, поэтому пояса выше двух тысяч размечены только в прототипе.",
+    sessions: [
+      { id: "chele-10-19", label: "10 ноя", wd: "вт", time: "19:00", floor: 2000 },
+      { id: "chele-12-19", label: "12 ноя", wd: "чт", time: "19:00", floor: 2000 },
+      { id: "chele-14-13", label: "14 ноя", wd: "сб", time: "13:00", floor: 2000 },
+      { id: "chele-14-18", label: "14 ноя", wd: "сб", time: "18:00", floor: 2000 },
+      { id: "chele-15-18", label: "15 ноя", wd: "вс", time: "18:00", floor: 2000 },
+      { id: "chele-22-18", label: "22 ноя", wd: "вс", time: "18:00", floor: 2000 },
+      { id: "chele-28-18", label: "28 ноя", wd: "сб", time: "18:00", floor: 2000 }
+    ]
+  },
+  {
+    id: "butusov", cat: "concert", art: "butusov",
+    title: "Бутусов. Nautilus. 65", short: "Бутусов\n65",
+    genre: "Концерт", age: "",
+    venue: "Live Арена",
+    address: "Новоивановское, улица Западная, 145. МЦД-1, станция «Сколково». Это за МКАД, не центр.",
+    duration: "",
+    organizer: "",
+    from: 2200,
+    hall: "flat",
+    about: "Юбилейный концерт Вячеслава Бутусова, в афише МТС Live он стоит как «Nautilus Pompilius. Вячеслав Бутусов. Юбилейный концерт — 65». Площадка вмещает до 11 000 человек.",
+    priceNote: "Открыта одна цена — от 2 200 ₽. Все места партера в прототипе стоят столько. Пояса дороже не выдумывал.",
+    sessions: [{ id: "butusov-22", label: "22 ноя", wd: "вс", time: "19:00", floor: 2200 }]
+  },
+  {
+    id: "ivan", cat: "concert", art: "ivan",
+    title: "Иванушки International", short: "Иванушки\n30 лет",
+    genre: "Поп", age: "6+",
+    venue: "Live Арена",
+    address: "Новоивановское, улица Западная, 145. МЦД-1, станция «Сколково», автобус от метро «Славянский бульвар».",
+    duration: "около 2 часов",
+    organizer: "",
+    from: 3000,
+    hall: "flat",
+    about: "Два вечера «30 солнечных лет на бис!». В программе хиты, которые площадка называет прямо: «Тополиный пух», «Билетик в кино», «Тучи», плюс более новые песни. 27 ноября билеты от 3 000 ₽, 28 ноября от 3 500 ₽.",
+    priceNote: "Цена зависит от вечера и взята с афиши МТС Live. В прототипе весь партер выбранного вечера стоит по этой нижней цене.",
+    sessions: [
+      { id: "ivan-27", label: "27 ноя", wd: "пт", time: "20:00", floor: 3000 },
+      { id: "ivan-28", label: "28 ноя", wd: "сб", time: "19:00", floor: 3500 }
+    ]
+  }
+];
+
+const accounts = {
+  debit: { name: "Текущий", mask: "4521", balance: 48200 },
+  save: { name: "Накопительный", mask: "1180", balance: 120000 }
+};
+
+const state = {
+  screen: "home",
+  stack: [],
+  dir: "fwd",
+  filter: "all",
+  q: "",
+  eventId: null,
+  sessionId: null,
+  picked: [],
+  ga: 0,
+  account: "debit",
+  orders: [],
+  orderId: null,
+  holdUntil: 0,
+  paying: false,
+  cityOpen: false
+};
+
+function rub(n) {
+  return new Intl.NumberFormat("ru-RU").format(n) + "\u00A0₽";
+}
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function evById(id) { return EVENTS.find(e => e.id === id); }
+function current() { return evById(state.eventId); }
+function session() {
+  const ev = current();
+  if (!ev) return null;
+  return ev.sessions.find(s => s.id === state.sessionId) || ev.sessions[0];
+}
+function count() { return state.picked.length + state.ga; }
+function gaPrice() {
+  const sess = session();
+  return sess ? sess.floor : 0;
+}
+function summary() {
+  const faceSeats = state.picked.reduce((s, p) => s + p.price, 0);
+  const face = faceSeats + state.ga * (current() && current().hall === "bond" ? 1900 : 0);
+  const fee = Math.round(face * 0.1);
+  const cashback = Math.round(face * 0.03);
+  return { face, fee, total: face + fee, cashback, n: count() };
+}
+function isTaken(eid, sid, id) {
+  if (state.orders.some(o => o.eventId === eid && o.sessionId === sid && o.seats.some(x => x.id === id))) return true;
+  const keep = eid === "bond" ? (id === "b-r2s5" || id === "b-r2s6" || id === "b-r3s5") : (id === "r5s8" || id === "r5s9");
+  if (keep) return false;
+  const rate = eid === "bond" ? 8 : 3;
+  return (hash(eid + sid + id) % 10) < rate;
+}
+function save() {
+  sessionStorage.setItem("afisha-v1", JSON.stringify({
+    orders: state.orders,
+    balances: { debit: accounts.debit.balance, save: accounts.save.balance }
+  }));
+}
+function seedOrder() {
+  return {
+    id: "A-10492",
+    eventId: "vals",
+    sessionId: "vals-12-19",
+    when: "12 ноября, четверг, 19:00",
+    title: "Вальс-бостон",
+    venue: "Театр эстрады",
+    bought: "2 ноября",
+    seats: [
+      { id: "r6s7", label: "Ряд 6, место 7", price: 3500 },
+      { id: "r6s8", label: "Ряд 6, место 8", price: 3500 }
+    ],
+    face: 7000, fee: 700, total: 7700, cashback: 210, account: "debit"
+  };
+}
+function load() {
+  try {
+    const raw = sessionStorage.getItem("afisha-v1");
+    if (raw) {
+      const data = JSON.parse(raw);
+      state.orders = data.orders || [];
+      if (data.balances) {
+        accounts.debit.balance = data.balances.debit;
+        accounts.save.balance = data.balances.save;
+      }
+      return;
+    }
+  } catch (e) {}
+  state.orders = [seedOrder()];
+  save();
+}
+function clock() {
+  return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+function todayLabel() {
+  return new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function artHTML(ev, featured) {
+  const lines = ev.short.split("\n").map(esc).join("<br>");
+  const age = ev.age ? `<i class="age">${esc(ev.age)}</i>` : "";
+  const ribbon = featured && ev.ribbon ? `<b class="ribbon">${esc(ev.ribbon)}</b>` : "<i></i>";
+  return `<div class="art art-${ev.art}">${age}${ribbon}<div><span class="kicker">${esc(ev.genre)}</span><strong>${lines}</strong></div><em>${esc(ev.sessions[0].label)} · ${esc(ev.venue)}</em></div>`;
+}
+function cardHTML(ev) {
+  const when = ev.sessions.length > 1 ? "несколько дат" : `${ev.sessions[0].label}, ${ev.sessions[0].time}`;
+  return `<button class="card" data-act="open" data-id="${ev.id}">${artHTML(ev, false)}<div class="meta"><b>${esc(ev.title)}</b><span>${esc(when)} · от ${rub(ev.from)}</span></div></button>`;
+}
+function section(title, ids) {
+  const cards = ids.map(id => cardHTML(evById(id))).join("");
+  return `<h2 class="sec">${title}</h2><div class="hscroll">${cards}</div>`;
+}
+function feedHTML() {
+  const q = state.q.trim().toLowerCase();
+  let items = EVENTS.filter(e => state.filter === "all" || e.cat === state.filter);
+  if (q) items = items.filter(e => (e.title + " " + e.venue + " " + e.genre).toLowerCase().includes(q));
+  if (!items.length) return `<p class="empty">В прототипе пять сверенных событий ноября. По этому запросу их нет.</p>`;
+  if (state.filter === "all" && !q) {
+    const bond = evById("bond");
+    const feature = `<button class="feature" data-act="open" data-id="bond">${artHTML(bond, true)}<div class="meta"><b>${esc(bond.title)}</b><span>14 ноября, 20:00 · ВТБ Арена · от ${rub(1900)}</span></div></button>`;
+    return feature + section("Мюзиклы в ноябре", ["vals", "chele"]) + section("Концерты", ["butusov", "ivan", "bond"]);
+  }
+  return `<div class="list">${items.map(e => cardHTML(e).replace('class="card"', 'class="card" style="flex:none"')).join("")}</div>`;
+}
+function homeHTML() {
+  return `<header class="homebar"><div class="brand"><i></i><div><b>Афиша</b><span>в приложении банка</span></div></div><button class="city" data-act="city">Москва</button></header>
+    <label class="search"><input id="q" type="search" placeholder="Спектакль, артист, площадка" value="${esc(state.q)}" autocomplete="off"></label>
+    <div class="chips">
+      <button data-act="filter" data-id="all" class="${state.filter === "all" ? "on" : ""}">Все</button>
+      <button data-act="filter" data-id="musical" class="${state.filter === "musical" ? "on" : ""}">Мюзиклы</button>
+      <button data-act="filter" data-id="concert" class="${state.filter === "concert" ? "on" : ""}">Концерты</button>
+    </div>
+    <div id="feed">${feedHTML()}</div>`;
+}
+function eventHTML() {
+  const ev = current();
+  const sess = session();
+  const sessions = ev.sessions.map(s => `<button class="sess ${s.id === sess.id ? "on" : ""}" data-act="session" data-id="${s.id}"><b>${esc(s.label)}</b><span>${esc(s.wd)}</span><em>${esc(s.time)}</em></button>`).join("");
+  const bits = [ev.duration, ev.age, ev.organizer].filter(Boolean).map(esc).join(" · ");
+  return `<header class="bar"><button class="icon back" data-act="back" aria-label="Назад">‹</button><h1>Событие</h1><span></span></header>
+    <div class="pad">
+      ${artHTML(ev, true)}
+      <div class="meta" style="padding-left:2px"><b style="font-size:22px">${esc(ev.title)}</b><span>${esc(ev.genre)}${ev.age ? " · " + esc(ev.age) : ""} · от ${rub(sess.floor)}</span></div>
+      <div class="venue"><b>${esc(ev.venue)}</b><span>${esc(ev.address)}</span></div>
+      <div class="sessions">${sessions}</div>
+      <p class="about">${esc(ev.about)}</p>
+      ${bits ? `<p class="note">${bits}</p>` : ""}
+      <p class="note">${esc(ev.priceNote)}</p>
+    </div>`;
+}
+function seatBtn(eid, sid, id, label, price, zone, wide) {
+  const taken = isTaken(eid, sid, id);
+  const on = state.picked.some(p => p.id === id);
+  const cls = `seat z-${zone} ${wide ? "wide" : ""} ${taken ? "taken" : ""} ${on ? "on" : ""}`;
+  return `<button class="${cls}" ${taken ? "disabled" : ""} data-act="seat" data-id="${id}" data-label="${esc(label)}" data-price="${price}" aria-label="${esc(label)}, ${price} рублей"></button>`;
+}
+function seatsHTML() {
+  const ev = current();
+  const sess = session();
+  let hall = "";
+  if (ev.hall === "bond") {
+    let rows = "";
+    for (let r = 1; r <= 8; r++) {
+      let seats = "";
+      for (let s = 1; s <= 10; s++) {
+        const id = `b-r${r}s${s}`;
+        seats += seatBtn(ev.id, sess.id, id, `Сектор B211, ряд ${r}, место ${s}`, 3000, "mid", false);
+      }
+      rows += `<div class="row"><span>${r}</span><div class="seats">${seats}</div></div>`;
+    }
+    hall = `<div class="ga"><div><b>Танцпол</b><span>без места · ${rub(1900)}</span></div><div class="stepper"><button data-act="ga" data-dir="-1" aria-label="Меньше">−</button><b id="gacount">${state.ga}</b><button data-act="ga" data-dir="1" aria-label="Больше">+</button></div></div>
+      <div class="hall"><div class="stage">сектор B211</div>${rows}</div>`;
+  } else if (ev.hall === "theater") {
+    let rows = "";
+    for (let r = 1; r <= 14; r++) {
+      const zone = r <= 4 ? "near" : r <= 9 ? "mid" : "far";
+      const price = r <= 4 ? ev.near : r <= 9 ? ev.mid : sess.floor;
+      let seats = "";
+      for (let s = 1; s <= 16; s++) {
+        if (s === 9) seats += `<i class="aisle"></i>`;
+        const id = `r${r}s${s}`;
+        seats += seatBtn(ev.id, sess.id, id, `Ряд ${r}, место ${s}`, price, zone, false);
+      }
+      rows += `<div class="row"><span>${r}</span><div class="seats">${seats}</div></div>`;
+    }
+    const boxes = ["Л1", "Л2", "П1", "П2"].map(name => {
+      const id = `box-${name}`;
+      return seatBtn(ev.id, sess.id, id, `Ложа ${name}`, ev.box, "near", true);
+    }).join("");
+    hall = `<div class="hall"><div class="stage">сцена</div>${rows}<div class="row"><span></span><div class="seats">${boxes}</div></div></div>`;
+  } else {
+    let rows = "";
+    for (let r = 1; r <= 10; r++) {
+      let seats = "";
+      for (let s = 1; s <= 12; s++) {
+        const id = `p-r${r}s${s}`;
+        seats += seatBtn(ev.id, sess.id, id, `Партер, ряд ${r}, место ${s}`, sess.floor, "far", false);
+      }
+      rows += `<div class="row"><span>${r}</span><div class="seats">${seats}</div></div>`;
+    }
+    hall = `<div class="hall"><div class="stage">партер</div>${rows}</div>`;
+  }
+  const left = state.holdUntil ? fmtLeft(state.holdUntil - Date.now()) : "10:00";
+  return `<header class="bar"><button class="icon back" data-act="back" aria-label="Назад">‹</button><h1>${esc(sess.label)}, ${esc(sess.time)}</h1><span></span></header>
+    <div class="pad">
+      <p class="note" id="hold">Бронь ${left}. Дальше 10 минут места возвращаются.</p>
+      <div class="legend"><span><i class="sw"></i> свободно</span><span><i class="sw taken"></i> занято</span><span><i class="sw on"></i> ваше</span></div>
+      <p class="note">${esc(ev.priceNote)}</p>
+      ${hall}
+      <div id="pick">${pickHTML()}</div>
+    </div>`;
+}
+function pickHTML() {
+  if (!count()) return `<p class="note">Выберите место или входной билет.</p>`;
+  const lines = state.picked.map(p => `<div class="rowsplit"><span>${esc(p.label)}</span><b>${rub(p.price)}</b></div>`).join("");
+  const ga = state.ga ? `<div class="rowsplit"><span>Танцпол × ${state.ga}</span><b>${rub(state.ga * 1900)}</b></div>` : "";
+  return lines + ga;
+}
+function payHTML() {
+  const ev = current();
+  const sess = session();
+  const s = summary();
+  const rows = Object.entries(accounts).map(([id, a]) => {
+    const short = s.total > a.balance;
+    return `<button class="acc ${state.account === id ? "on" : ""}" data-act="account" data-id="${id}"><span><b>${esc(a.name)} ·· ${a.mask}</b><small>${rub(a.balance)}</small></span>${short ? `<em class="warn">не хватает ${rub(s.total - a.balance)}</em>` : ""}</button>`;
+  }).join("");
+  return `<header class="bar"><button class="icon back" data-act="back" aria-label="Назад">‹</button><h1>Оплата</h1><span></span></header>
+    <div class="pad">
+      <div class="block"><b>${esc(ev.title)}</b><span>${esc(sess.label)}, ${esc(sess.wd)}, ${esc(sess.time)} · ${esc(ev.venue)}</span></div>
+      <div class="block">
+        ${pickHTML()}
+        <div class="rowsplit"><span>Билеты</span><b>${rub(s.face)}</b></div>
+        <div class="rowsplit"><span>Сервисный сбор 10%</span><b>${rub(s.fee)}</b></div>
+        <div class="rowsplit total"><span>К оплате</span><b>${rub(s.total)}</b></div>
+      </div>
+      ${rows}
+      <p class="note">Спишем со счёта, карту вводить не нужно. Кэшбэк ${rub(s.cashback)} — это 3% с номинала, на сбор он не начисляется. Билет продаёт оператор, банк только проводит оплату.</p>
+    </div>`;
+}
+function doneHTML() {
+  const order = state.orders.find(o => o.id === state.orderId) || state.orders[0];
+  return `<div class="done">
+      <div class="mark"><svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M8 18.5 15 25.5 28 11" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h1>Оплачено</h1>
+      <p class="about">${esc(order.title)}. ${rub(order.total)} списали со счёта «${esc(accounts[order.account].name)}». Кэшбэк ${rub(order.cashback)} вернётся на него.</p>
+      <button class="cta" data-act="order" data-id="${order.id}">Открыть билет</button>
+      <button class="cta ghost" data-act="tab" data-tab="home">К афише</button>
+    </div>`;
+}
+function ticketsHTML() {
+  const list = state.orders.map(o => `<button class="order" data-act="order" data-id="${o.id}"><b>${esc(o.title)}</b><span>${esc(o.when)}</span><span>${o.seats.length} бил. · ${esc(o.venue)}</span></button>`).join("");
+  return `<header class="homebar"><div class="brand"><i></i><div><b>Билеты</b><span>${state.orders.length} в приложении</span></div></div></header>${list || `<p class="empty">Пока пусто.</p>`}`;
+}
+function ticketHTML() {
+  const o = state.orders.find(x => x.id === state.orderId);
+  if (!o) return `<p class="empty">Билет не найден.</p>`;
+  const seats = o.seats.map(s => esc(s.label)).join("<br>");
+  return `<header class="bar"><button class="icon back" data-act="back" aria-label="Назад">‹</button><h1>Билет</h1><span></span></header>
+    <div class="pad">
+      <div class="block"><b>${esc(o.title)}</b><span>${esc(o.when)}<br>${esc(o.venue)}</span></div>
+      <div class="qr" id="qr" data-code="${esc(o.id)}"><span class="codefallback">${esc(o.id)}</span></div>
+      <div class="block"><b>${seats}</b><span>Заказ ${esc(o.id)} · куплен ${esc(o.bought)}<br>На входе достаточно кода. Печатать не нужно.<br>Кэшбэк ${rub(o.cashback)}.</span></div>
+      <button class="cta ghost" data-act="open" data-id="${o.eventId}">К событию</button>
+    </div>`;
+}
+function accountHTML() {
+  const ops = state.orders.map(o => `<div class="rowsplit"><span>${esc(o.title)} · ${esc(o.bought)}</span><b>−${rub(o.total)}</b></div>`).join("");
+  return `<header class="homebar"><div class="brand"><i></i><div><b>Счёт</b><span>откуда платим за билеты</span></div></div></header>
+    <div class="pad">
+      <div class="plastic"><span>Дебетовая ·· ${accounts.debit.mask}</span><b>${rub(accounts.debit.balance)}</b><span>Накопительный ·· ${accounts.save.mask} · ${rub(accounts.save.balance)}</span></div>
+      <div class="block"><b>Операции афиши</b>${ops}</div>
+      <p class="note">Баланс — это остаток сейчас: билет от 2 ноября в него уже вошёл, новая оплата списывается сверху. В боевой версии деньги идут с выбранного счёта, чужая карта не нужна.</p>
+    </div>`;
+}
+function moreHTML() {
+  return `<header class="homebar"><div class="brand"><i></i><div><b>Ещё</b><span>заметка к тестовому</span></div></div></header>
+    <div class="pad more">
+      <p>Прототип афиши в красно-белом банковском приложении: подборки, карточка, места, оплата со счёта, билеты. События — живая афиша Москвы на ноябрь 2026.</p>
+      <p>Под капотом у таких витрин не своя касса. Т-Банку билеты поставляют Кассир.ру и, с октября 2024, МТС Live. Альфа сидит в капитале Кассира. Сбер развивает «Афишу» и бонусы «Спасибо».</p>
+      <p>Запускать я бы с МТС Live и Ticketscloud: банковский канал у них уже был, API распространителя описан. Кассир — второй фид.</p>
+      <p><a href="roadmap.html">Полный роадмап, экономика и источники</a></p>
+      <button class="cta ghost" data-act="reset">Сбросить демо-покупки</button>
+    </div>`;
+}
+function screenHTML() {
+  if (state.screen === "home") return homeHTML();
+  if (state.screen === "event") return eventHTML();
+  if (state.screen === "seats") return seatsHTML();
+  if (state.screen === "pay") return payHTML();
+  if (state.screen === "done") return doneHTML();
+  if (state.screen === "tickets") return ticketsHTML();
+  if (state.screen === "ticket") return ticketHTML();
+  if (state.screen === "account") return accountHTML();
+  return moreHTML();
+}
+function dockHTML() {
+  if (state.screen === "event") {
+    const sess = session();
+    return `<button class="cta" data-act="go-seats">Выбрать места · от ${rub(sess.floor)}</button>`;
+  }
+  if (state.screen === "seats") {
+    const s = summary();
+    const label = s.n ? `К оплате · ${s.n} бил. · ${rub(s.total)}` : "Выберите места";
+    return `<button class="cta" data-act="go-pay" ${s.n ? "" : "disabled"}>${label}</button>`;
+  }
+  if (state.screen === "pay") {
+    const s = summary();
+    return `<button class="cta" id="paybtn" data-act="pay">Оплатить ${rub(s.total)}</button>`;
+  }
+  return "";
+}
+function fmtLeft(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+}
+function render(animated) {
+  const view = document.getElementById("view");
+  const top = animated ? 0 : view.scrollTop;
+  const pane = document.createElement("div");
+  pane.className = "pane" + (animated ? " anim" : "") + (state.dir === "back" ? " back" : "");
+  pane.innerHTML = screenHTML();
+  view.replaceChildren(pane);
+  if (!animated) view.scrollTop = top;
+  state.dir = "fwd";
+  const dock = document.getElementById("dock");
+  dock.innerHTML = dockHTML();
+  dock.classList.toggle("hide", dock.innerHTML === "");
+  document.getElementById("tabs").classList.toggle("hide", !WITH_TABS.has(state.screen));
+  document.querySelectorAll("#tabs button").forEach(b => {
+    const on = b.dataset.tab === state.screen || (state.screen === "ticket" && b.dataset.tab === "tickets");
+    b.classList.toggle("on", on);
+  });
+  document.getElementById("clk").textContent = clock();
+  if (state.screen === "ticket") requestAnimationFrame(drawQR);
+  const q = document.getElementById("q");
+  if (q && document.activeElement !== q && state.keepSearch) {
+    q.focus();
+    const n = q.value.length;
+    q.setSelectionRange(n, n);
+  }
+  state.keepSearch = false;
+}
+function drawQR() {
+  const el = document.getElementById("qr");
+  if (!el || !window.QRCode) return;
+  const text = el.dataset.code || "";
+  el.innerHTML = "";
+  try {
+    new QRCode(el, { text, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M });
+  } catch (e) {
+    el.innerHTML = `<span class="codefallback">${esc(text.split("|")[0])}</span>`;
+  }
+}
+function toast(text) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove("show"), 2200);
+}
+function go(screen, push) {
+  if (push) state.stack.push(state.screen);
+  state.screen = screen;
+  state.dir = "fwd";
+  render(true);
+}
+function back() {
+  state.dir = "back";
+  state.screen = state.stack.pop() || "home";
+  render(true);
+}
+function openEvent(id) {
+  state.eventId = id;
+  state.sessionId = evById(id).sessions[0].id;
+  state.picked = [];
+  state.ga = 0;
+  state.holdUntil = 0;
+  if (state.screen !== "event") state.stack.push(state.screen);
+  state.screen = "event";
+  state.dir = "fwd";
+  render(true);
+}
+function paintCommerce() {
+  const pick = document.getElementById("pick");
+  if (pick) pick.innerHTML = pickHTML();
+  const dock = document.getElementById("dock");
+  if (state.screen === "seats" || state.screen === "pay") {
+    dock.innerHTML = dockHTML();
+    dock.classList.toggle("hide", dock.innerHTML === "");
+  }
+  const hold = document.getElementById("hold");
+  if (hold && state.holdUntil) hold.textContent = "Бронь " + fmtLeft(state.holdUntil - Date.now()) + ". Дальше 10 минут места возвращаются.";
+}
+function toggleSeat(btn) {
+  const id = btn.dataset.id;
+  const i = state.picked.findIndex(p => p.id === id);
+  if (i >= 0) {
+    state.picked.splice(i, 1);
+    btn.classList.remove("on");
+  } else {
+    if (count() >= 6) { toast("Не больше шести билетов за раз"); return; }
+    state.picked.push({ id, label: btn.dataset.label, price: Number(btn.dataset.price) });
+    btn.classList.add("on");
+    if (!state.holdUntil) state.holdUntil = Date.now() + 10 * 60 * 1000;
+  }
+  if (!count()) state.holdUntil = 0;
+  paintCommerce();
+}
+function stepGa(dir) {
+  const next = state.ga + dir;
+  if (next < 0) return;
+  if (dir > 0 && count() >= 6) { toast("Не больше шести билетов за раз"); return; }
+  state.ga = next;
+  if (state.ga && !state.holdUntil) state.holdUntil = Date.now() + 10 * 60 * 1000;
+  if (!count()) state.holdUntil = 0;
+  const el = document.getElementById("gacount");
+  if (el) el.textContent = String(state.ga);
+  paintCommerce();
+}
+function ensureHold() {
+  if (state.holdUntil && Date.now() > state.holdUntil) {
+    state.picked = [];
+    state.ga = 0;
+    state.holdUntil = 0;
+    toast("Бронь снята");
+    if (state.screen === "seats" || state.screen === "pay") render(false);
+  } else if (state.holdUntil && (state.screen === "seats" || state.screen === "pay")) {
+    const hold = document.getElementById("hold");
+    if (hold) hold.textContent = "Бронь " + fmtLeft(state.holdUntil - Date.now()) + ". Дальше 10 минут места возвращаются.";
+  }
+}
+async function pay() {
+  if (state.paying) return;
+  const s = summary();
+  if (!s.n) return;
+  const acc = accounts[state.account];
+  const btn = document.getElementById("paybtn");
+  if (s.total > acc.balance) {
+    toast("На этом счёте не хватает " + rub(s.total - acc.balance));
+    if (btn) { btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake"); }
+    return;
+  }
+  state.paying = true;
+  if (btn) { btn.disabled = true; btn.classList.add("loading"); }
+  await new Promise(r => setTimeout(r, 1000));
+  const ev = current();
+  const sess = session();
+  const seats = state.picked.slice();
+  if (state.ga) seats.push({ id: "ga-" + Date.now(), label: "Танцпол × " + state.ga, price: 1900 * state.ga });
+  acc.balance -= s.total;
+  const order = {
+    id: "A-" + (10000 + Math.floor(Math.random() * 89999)),
+    eventId: ev.id,
+    sessionId: sess.id,
+    when: `${sess.label.replace(" ноя", " ноября")}, ${sess.wd === "пн" ? "понедельник" : sess.wd === "вт" ? "вторник" : sess.wd === "ср" ? "среда" : sess.wd === "чт" ? "четверг" : sess.wd === "пт" ? "пятница" : sess.wd === "сб" ? "суббота" : "воскресенье"}, ${sess.time}`,
+    title: ev.title,
+    venue: ev.venue,
+    bought: todayLabel(),
+    seats,
+    face: s.face,
+    fee: s.fee,
+    total: s.total,
+    cashback: s.cashback,
+    account: state.account
+  };
+  state.orders.unshift(order);
+  state.orderId = order.id;
+  state.picked = [];
+  state.ga = 0;
+  state.holdUntil = 0;
+  state.paying = false;
+  save();
+  state.stack = [];
+  state.screen = "done";
+  render(true);
+}
+function resetDemo() {
+  sessionStorage.removeItem("afisha-v1");
+  accounts.debit.balance = 48200;
+  accounts.save.balance = 120000;
+  state.orders = [seedOrder()];
+  state.picked = [];
+  state.ga = 0;
+  save();
+  toast("Демо снова с одним билетом");
+  state.stack = [];
+  state.screen = "home";
+  render(true);
+}
+function tabsHTML() {
+  return TABS.map(([id, label]) => `<button data-act="tab" data-tab="${id}">${ICONS[id]}<span>${label}</span></button>`).join("");
+}
+
+document.getElementById("tabs").innerHTML = tabsHTML();
+document.getElementById("phone").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  const act = t.dataset.act;
+  if (act === "sheet") return;
+  if (act === "seat") { toggleSeat(t); return; }
+  if (act === "ga") { stepGa(Number(t.dataset.dir)); return; }
+  if (act === "open") { openEvent(t.dataset.id); return; }
+  if (act === "back") { back(); return; }
+  if (act === "tab") {
+    state.stack = [];
+    state.screen = t.dataset.tab;
+    state.dir = "fwd";
+    render(true);
+    return;
+  }
+  if (act === "filter") {
+    state.filter = t.dataset.id;
+    const feed = document.getElementById("feed");
+    document.querySelectorAll(".chips button").forEach(b => b.classList.toggle("on", b.dataset.id === state.filter));
+    if (feed) feed.innerHTML = feedHTML();
+    return;
+  }
+  if (act === "session") {
+    state.sessionId = t.dataset.id;
+    state.picked = [];
+    state.ga = 0;
+    state.holdUntil = 0;
+    render(false);
+    return;
+  }
+  if (act === "go-seats") { go("seats", true); return; }
+  if (act === "go-pay") { if (count()) go("pay", true); return; }
+  if (act === "account") {
+    state.account = t.dataset.id;
+    render(false);
+    return;
+  }
+  if (act === "pay") { pay(); return; }
+  if (act === "order") {
+    state.orderId = t.dataset.id;
+    go("ticket", true);
+    return;
+  }
+  if (act === "city") {
+    state.cityOpen = true;
+    document.getElementById("sheet").classList.add("show");
+    return;
+  }
+  if (act === "city-close") {
+    state.cityOpen = false;
+    document.getElementById("sheet").classList.remove("show");
+    return;
+  }
+  if (act === "reset") { resetDemo(); return; }
+});
+document.getElementById("phone").addEventListener("input", (e) => {
+  if (e.target.id !== "q") return;
+  state.q = e.target.value;
+  const feed = document.getElementById("feed");
+  if (feed) feed.innerHTML = feedHTML();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (state.cityOpen) {
+    state.cityOpen = false;
+    document.getElementById("sheet").classList.remove("show");
+  } else if (!WITH_TABS.has(state.screen)) back();
+});
+setInterval(() => {
+  const c = document.getElementById("clk");
+  if (c) c.textContent = clock();
+  ensureHold();
+}, 500);
+
+load();
+render(false);
+</script>
+</body>
+</html>
